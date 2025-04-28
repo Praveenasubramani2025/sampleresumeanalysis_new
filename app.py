@@ -4,7 +4,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from io import StringIO
+from io import StringIO, BytesIO
 import pdfminer.high_level
 from pdfminer.layout import LAParams
 import os
@@ -12,8 +12,6 @@ import spacy
 import logging
 import pandas as pd
 import streamlit as st
-import zipfile
-import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -148,11 +146,12 @@ def get_files_from_folder(folder_path):
 
 
 def save_to_excel(results):
-    """Save results to an Excel file."""
+    """Save results to an in-memory Excel file."""
     df = pd.DataFrame(results)
-    output_file = "resume_analysis_results.xlsx"
-    df.to_excel(output_file, index=False)
-    return output_file
+    output = BytesIO()  # Use BytesIO to save the file in memory
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)  # Go back to the beginning of the stream
+    return output
 
 
 # Streamlit app setup
