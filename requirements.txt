@@ -1,0 +1,8 @@
+flask
+streamlit
+nltk
+spacy
+pandas
+scikit-learn
+pdfminer.six
+openpyxl
