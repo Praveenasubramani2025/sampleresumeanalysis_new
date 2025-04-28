@@ -4,7 +4,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from io import StringIO, BytesIO
+from io import StringIO
 import pdfminer.high_level
 from pdfminer.layout import LAParams
 import os
@@ -29,9 +29,8 @@ try:
 except LookupError:
     nltk.download('punkt')
 
-
+# Extract text from PDF file using pdfminer.six
 def extract_text_from_pdf(pdf_path):
-    """Extracts text from a PDF file using pdfminer.six."""
     try:
         output_string = StringIO()
         with open(pdf_path, 'rb') as in_file:
@@ -41,52 +40,44 @@ def extract_text_from_pdf(pdf_path):
         logging.error(f"Error extracting text from PDF: {e}")
         return ""
 
-
+# Preprocess the resume text (remove punctuation, lowercase, tokenize, and remove stopwords)
 def preprocess_text(text):
-    """Preprocesses text by removing punctuation, converting to lowercase,
-    tokenizing, and removing stopwords.
-    """
     text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
     text = text.lower()  # Convert to lowercase
     tokens = word_tokenize(text)  # Tokenize
     stop_words = set(stopwords.words('english'))  # Get stopwords
     filtered_tokens = [w for w in tokens if not w in stop_words]  # Remove stopwords
-    return " ".join(filtered_tokens)  # Join back into a string
+    return " ".join(filtered_tokens)
 
-
+# Extract person's name from resume using spaCy
 def extract_name(resume_text):
-    """Attempts to extract the name from the resume text using spaCy."""
     doc = nlp(resume_text)
     for ent in doc.ents:
         if ent.label_ == "PERSON":
             return ent.text
     return "Name not found"
 
-
+# Extract phone number from resume using regex pattern
 def extract_phone_number(resume_text):
-    """Extract phone number using a regex pattern."""
     phone_pattern = r'(?:\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?|\d{3})[-.\s]?\d{3}[-.\s]?\d{4}'
     match = re.search(phone_pattern, resume_text)
     return match.group() if match else None
 
-
+# Extract email address from resume using regex pattern
 def extract_email(resume_text):
-    """Extract email address using a regex pattern."""
     email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
     match = re.search(email_pattern, resume_text)
     return match.group() if match else None
 
-
+# Extract total years of experience from resume
 def extract_experience_years(resume_text):
-    """Extract total years of experience from resume text."""
     experience_years = re.findall(r'(\d+)\+?\s+(?:years|yrs)', resume_text, re.I)
     if experience_years:
         return max(map(int, experience_years))
     return None
 
-
+# Analyze resume against job description (SAP CPI specific)
 def analyze_resume_cpi(resume_path, job_description, resume_text):
-    """Analyzes a resume against a job description, specifically for SAP CPI expertise."""
     processed_resume = preprocess_text(resume_text)
     processed_job_description = preprocess_text(job_description)
 
@@ -95,10 +86,10 @@ def analyze_resume_cpi(resume_path, job_description, resume_text):
     vectors = vectorizer.fit_transform([processed_resume, processed_job_description])
     similarity_score = cosine_similarity(vectors[0], vectors[1])[0][0]
 
-    # Keyword Matching (Basic)
+    # Basic Keyword Matching
     job_keywords = processed_job_description.split()
     resume_keywords = processed_resume.split()
-    matched_keywords = list(set(job_keywords) & set(resume_keywords))  # Find common keywords
+    matched_keywords = list(set(job_keywords) & set(resume_keywords))
 
     # SAP CPI Specific Skills Analysis
     cpi_skills = [
@@ -119,7 +110,7 @@ def analyze_resume_cpi(resume_path, job_description, resume_text):
 
     cpi_skills_found = [skill for skill in cpi_skills if skill in processed_resume]
 
-    # Seniority Keywords (Adjust as needed)
+    # Seniority Level Detection
     seniority_keywords = ["lead", "architect", "senior", "expert", "consultant", "principal"]
     seniority_found = any(keyword in processed_resume for keyword in seniority_keywords)
 
@@ -138,21 +129,17 @@ def analyze_resume_cpi(resume_path, job_description, resume_text):
 
     return analysis_results
 
-
+# Get all PDF and TXT files from the folder
 def get_files_from_folder(folder_path):
-    """Get all PDF and TXT files from the folder."""
     files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith(('.pdf', '.txt'))]
     return files
 
-
+# Save results to Excel
 def save_to_excel(results):
-    """Save results to an in-memory Excel file."""
     df = pd.DataFrame(results)
-    output = BytesIO()  # Use BytesIO to save the file in memory
-    df.to_excel(output, index=False, engine='openpyxl')
-    output.seek(0)  # Go back to the beginning of the stream
-    return output
-
+    output_file = "resume_analysis_results.xlsx"
+    df.to_excel(output_file, index=False)
+    return output_file
 
 # Streamlit app setup
 st.title("Resume Analysis Web App")
@@ -173,11 +160,21 @@ if folder_path:
                 with open(resume_path, "r", encoding="utf-8") as f:
                     resume_text = f.read() if resume_path.lower().endswith(".txt") else extract_text_from_pdf(resume_path)
 
+                # Extract details from resume
+                name = extract_name(resume_text)
+                phone = extract_phone_number(resume_text)
+                email = extract_email(resume_text)
+                experience_years = extract_experience_years(resume_text)
+
                 # Analyze resume
                 analysis_results = analyze_resume_cpi(resume_path, job_description, resume_text)
 
                 result = {
                     "File Name": os.path.basename(resume_path),
+                    "Name": name,
+                    "Phone": phone,
+                    "Email": email,
+                    "Experience (Years)": experience_years,
                     "Similarity Score": analysis_results['similarity_score'],
                     "Matched Keywords": ', '.join(analysis_results['matched_keywords']),
                     "CPI Skills Found": ', '.join(analysis_results['cpi_skills_found']),
